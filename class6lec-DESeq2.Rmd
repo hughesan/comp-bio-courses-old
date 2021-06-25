@@ -1,0 +1,150 @@
+---
+title: "class6lec"
+author: "alexandria hughes"
+date: "December 13, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+#source("https://bioconductor.org/biocLite.R")
+#biocLite("DESeq2")
+
+library(eda)
+
+#update_eda()
+
+library(DESeq2)
+library(pheatmap)
+library(RColorBrewer)
+library(tidyverse)
+library(cowplot)
+```
+
+```{r}
+M <- matrix(c(1:12), nrow=4, byrow=TRUE)
+
+M[1,2] #1st row 2nd column
+M[-1. -1] #drop 1st row 1st col
+M[1,] #just the 1st row
+
+colnames(M) <- c("col1", "col2", "col3")
+colnames(M)
+
+rownames(M) <- c("row1", "row2", "row3", "row4")
+M[2, 2:3]
+```
+
+```{r}
+log2(M)
+M/M[,1]
+```
+
+```{r}
+head(drug_resistant_counts)
+```
+
+```{r}
+drug_resistant2_coldata
+```
+
+```{r}
+dds <- DESeqDataSetFromMatrix(countData = drug_resistant_counts, colData = drug_resistant_coldata, design = ~drug)
+dds
+```
+
+```{r}
+#filter genes with low/no expression
+nrow(dds)
+
+dds <- dds[rowSums(counts(dds)) > 1, ] #summing rowwise
+nrow(dds)
+
+```
+
+```{r} 
+rld <- rlog(dds, blind = FALSE)
+rld
+#rlog transform data
+```
+
+```{r}
+sampleDists <- dist(t(assay(rld)))
+head(sampleDists)
+```
+
+```{r}
+sampleDistMatrix <- as.matrix(sampleDists)
+colors <- colorRampPalette(rev(brewer.pal(9, "Blues")))(255)
+
+# Plot sample distance heatmap with pheatmap
+library(pheatmap) ; pheatmap(sampleDistMatrix,
+         col = colors)
+```
+```{r}
+# Generate PCA plot with DESeq2 plotPCA() wrapper
+plotPCA(rld, intgroup = "drug") +
+  scale_color_brewer(palette = "Set1")
+```
+```{r}
+dds <- DESeq(dds)
+
+res <- results(dds)
+```
+```{r}
+res_C <- results(dds, contrast = c("drug", "none", "C"))
+#lots of args here, lfcThreshold log fold change, alpha is false disc rate p<some value
+```
+
+```{r}
+res_tbl <- as.data.frame(res) %>% tibble::rownames_to_column("gene") %>% as.tibble()
+res_tbl
+```
+
+```{r}
+# Return results with moderated log2 fold-changes.
+res_ma <- lfcShrink(dds, contrast=c("drug","none","A"), res=res)
+
+# Plot MA
+plotMA(res_ma, ylim = c(-6,6))
+```
+
+```{r}
+plotCounts(dds,
+           gene = "ESR1",
+           intgroup=c("drug"))
+```
+
+```{r}
+dds_plot <- plotCounts(dds,
+           gene = "ESR1",
+           intgroup=c("drug"),
+           returnData = TRUE)
+
+# Clean up plot with ggplot2
+ggplot(dds_plot, aes(x = drug, y = count, color = drug)) +
+  scale_y_log10() +
+  geom_point(cex = 3)
+```
+
+```{r}
+top_genes <- res_tbl %>% arrange(padj) %>% head(20)
+top_genes
+```
+
+```{r}
+# subset rlog matrix based on gene list
+mat  <- assay(rld)[ top_genes$gene, ]
+```
+
+```{r}
+# normalize expression to per-gene average
+mat  <- mat - rowMeans(mat)
+
+# plot heatmap
+pheatmap(mat)
+```
+

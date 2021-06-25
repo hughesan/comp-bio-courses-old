@@ -1,0 +1,146 @@
+---
+title: "class 4"
+author: "alexandria hughes"
+date: "December 6, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(eda)
+```
+
+Positional data BED format start and end position for a particular feature
+
+UCSC table browser
+  tools -> table browser
+  
+Encode home page -> data 
+
+Variant of BED format - number of reads that cross a particualr base pair - Bedgraph - the value is COVERAGE
+the peaks on ucsc are bedgraph data
+
+raw seq data fastq format (header, sequences, comment line, encoding that indicates quality for each nucleotide) -> align to genome and geta BAM/SAM file, for every read you have info about position/quality/etc -> Calculate BEDgraph
+
+these steps take a while
+
+Chipseq peaks in human cells: download file
+
+```{r}
+library(tidyverse)
+url <- "http://hgdownload.cse.ucsc.edu/goldenPath/hg19/encodeDCC/wgEncodeRegTfbsClustered/wgEncodeRegTfbsClusteredV3.bed.gz"
+
+#download.file(url, "wgEncodeRegTfbsClusteredV3.bed.gz")
+
+#tf_bed <- read_tsv("wgEncodeRegTfbsClusteredV3.bed.gz", 
+#                   col_names = F)
+
+file_name <- system.file("extdata", 
+                         "wgEncodeRegTfbsClusteredV3.bed.gz", 
+                         package = "eda")
+
+tf_bed <- read_tsv(file_name, col_names = F)
+```
+Other ways to look at this without downloading it - see next box on class webpage
+
+```{r}
+tf_bed
+new_names <- c("chrom", "start", "end", "value")
+colnames(tf_bed) <- new_names
+head(tf_bed)
+```
+```{r}
+tf_bed %>% group_by(value) %>% summarize(n_peaks=n())
+```
+
+```{r}
+tf_bed %>% count(value) %>% arrange(desc(n)) 
+#ctcf has the most sites
+```
+```{r}
+tf_bed %>% mutate(peak_length = end-start)
+```
+
+```{r}
+tf_bed %>% mutate(peak_length = end-start) %>% group_by(value) %>% summarize(total_bps= sum(peak_length)) %>% arrange(desc(total_bps)) %>% slice(1)
+
+#slice gives you the top thing per group (only 1 group here so only one output) 
+
+#total num base pairs each tf binds to in the genome
+```
+```{r}
+#broadest or narrowest peak 
+tf_bed %>% mutate(peak_length = end-start) %>% group_by(value) %>% arrange(desc(peak_length))
+```
+
+```{r}
+#Integrating multiple datasets
+#Use valr now
+
+install.packages("valr")
+library(valr)
+
+```
+
+```{r}
+bed_file <- system.file("extdata",
+                        "6fields.bed.gz",
+                        package = "valr")
+bed_file
+
+read_bed(bed_file, n_fields=6) #num columsn, 6, you have to tell it
+```
+
+```{r}
+#How many snps in tf binding sites?
+#all the snps on chr22
+
+library(valr)
+snp_file <- system.file("extdata", 
+                        "hg19.snps147.chr22.bed.gz", 
+                        package = "valr")
+
+snps <- read_bed(snp_file, 
+                 n_fields = 6)
+snps
+
+#intersect with tf_bed
+
+snps_in_tfs <- bed_intersect(tf_bed, snps) 
+
+snps_in_tfs
+
+#Unique column: .overlap indicates number of nucleotides they overlap (for a snp, =1)
+
+```
+
+```{r}
+#bed_closest: how close are snps to tss sites? entire transcribed region of a gene, score is number exons
+#genes on minus strans, the end is the start of the gene transcription. opposite plus
+library(valr)
+library(dplyr)
+gene_file <- system.file("extdata", 
+                        "hg19_genes.bed.gz", 
+                        package = "eda")
+
+genes <- read_bed(gene_file, 
+                 n_fields = 6)
+genes
+
+genes %>% filter(strand == "+") %>% mutate(end = start+1) -> TSS
+
+bed_closest(snps, TSS) %>% filter(abs(.dist) <100 )
+```
+
+
+
+
+
+
+
+
+

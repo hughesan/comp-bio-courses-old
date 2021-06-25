@@ -1,0 +1,188 @@
+---
+title: "class7lecture"
+author: "alexandria hughes"
+date: "December 15, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(Seurat)
+library(tidyverse)
+
+```
+
+```{r}
+# load the path to the example data
+pbmc_10x <- system.file("extdata", "pbmc_gene_bc_matrices", "hg19", package = "eda")
+
+# read the example data
+pbmc.data <- Read10X(pbmc_10x)
+
+# print the size of the *sparse* matrix
+object.size(x = pbmc.data) %>%
+  format(units = "auto")
+#> [1] "36.9 Mb"
+
+# print the size of the *full* matrix
+object.size(as.matrix(x = pbmc.data)) %>%
+  format(units = "auto")
+#> [1] "676.4 Mb"
+
+```
+
+```{r}
+pbmc.data
+```
+
+```{r}
+pbmc <- CreateSeuratObject(raw.data = pbmc.data,
+                           min.cells = 3, #3 cells with detectable amt to keep
+                           min.genes = 200, #at least 200 rows (???????)
+                           project = "10x_PBMC")
+pbmc
+```
+```{r}
+# Calculate percent of reads that are mitochondrial: no great way to identify cells that are dead, etc. The cells with higher mt stuff are not as healthy
+
+mito.genes <- grep(pattern = "^MT-",  #grep is line by line text searching tool looking for reg exp. carrot means anchored at beginning of string. All the line that contain starting with mt (mitochondrial genes do)
+                   x = rownames(x = pbmc@data),
+                   value = TRUE)
+
+percent.mito <- Matrix::colSums(pbmc@raw.data[mito.genes, ])/Matrix::colSums(pbmc@raw.data) # at sign @@@@ accesses slot
+#total num mt reads in a cell summing by column (a cell) and dividing by the full sum of column
+
+# Add percent.mite as metadata to Seurat object
+pbmc <- AddMetaData(object = pbmc,
+                    metadata = percent.mito,
+                    col.name = "percent.mito")
+#per cell metadata. like overwriting old object but really adding info to it (a new column) 
+
+# Plot number of genes, number of UMIs and percent.mito
+VlnPlot(object = pbmc,
+        features.plot = c("nGene", "nUMI", "percent.mito"),
+        nCol = 3)
+#violin plot. each dot a cell, the shape shows density of dots. UMIs unique mol identifiers during RT/pcr to eliminate pcr duplicates. unique UMIs detected per cell
+```
+```{r}
+#outliers
+GenePlot(object = pbmc, gene1 = "nUMI", gene2 = "percent.mito")
+
+```
+
+```{r}
+GenePlot(object = pbmc, gene1 = "nUMI", gene2 = "nGene") #UMIs vs outlier genes
+```
+
+```{r}
+pbmc <- FilterCells(object = pbmc,
+                    subset.names = c("nGene", "percent.mito"), 
+                    low.thresholds = c(200, -Inf),
+                    high.thresholds = c(2500, 0.05))
+pbmc
+```
+
+```{r}
+pbmc <- NormalizeData(object = pbmc,
+                      normalization.method = "LogNormalize", 
+                      scale.factor = 10000)
+
+```
+```{r}
+pbmc <- FindVariableGenes(object = pbmc,
+                          mean.function = ExpMean,
+                          dispersion.function = LogVMR, 
+                          x.low.cutoff = 0.0125,
+                          x.high.cutoff = 3,
+                          y.cutoff = 0.5)
+```
+```{r}
+
+length(x = pbmc@var.genes)
+```
+
+```{r}
+#unintersting variation, regress-out stuff
+pbmc <- ScaleData(object = pbmc,
+                  vars.to.regress = c("nUMI", "percent.mito"))
+```
+```{r}
+pbmc <- RunPCA(object = pbmc,
+               pc.genes = pbmc@var.genes,
+               do.print = TRUE,
+               pcs.print = 1:5,
+               genes.print = 5)
+```
+
+```{r}
+PCAPlot(object = pbmc,
+        dim.1 = 1, 
+        dim.2 = 2)
+```
+
+```{r}
+#how many PCs are significant? the next several fxns figure how many PCs contain useful info
+#FIRST WAY
+PCHeatmap(object = pbmc,
+          pc.use = 1:12,
+          cells.use = 500,
+          do.balanced = TRUE, 
+          label.columns = FALSE,
+          use.full = FALSE)
+#the first ones are clear divisions, gets progressively worse. How do you tell which ones matter? kinda subjective, through 7 or 8 would prob be reasonable
+
+#chose the 500 cells that are the most significantly divided by the first pc, 500 cells that are the most different on 2nd pc, etc
+```
+```{r}
+#jackstraw plot takes so long to run he's not showing us
+#distrib of p values on the PCs, most quant way to pick how many PCs
+#SECOND WAY
+pbmc <- JackStraw(object = pbmc,
+                  num.replicate = 100,
+                  do.print = FALSE)
+
+JackStrawPlot(object = pbmc, PCs = 1:12)
+```
+
+```{r}
+#THIRD WAY. elbow plot
+#std dev of pc across pcs, define an "elbow". Here looks like 8 or 9, so look at the heat maps above and this is similar (less dramatic divisions starting at 7ish above)
+
+PCElbowPlot(object = pbmc)
+```
+```{r}
+#tSNE, clusters of cells
+
+pbmc <- FindClusters(object = pbmc,
+                     reduction.type = "pca",
+                     dims.use = 1:10, #We chose PCs 1 through 10
+                     resolution = 0.6,
+                     print.output = 0,
+                     save.SNN = TRUE)
+
+pbmc <- RunTSNE(object = pbmc,
+                dims.use = 1:10,
+                do.fast = TRUE)
+
+TSNEPlot(object = pbmc)
+```
+```{r}
+#saveRDS(pbmc, "pbmc.rds") 
+#pbmc <- readRDS("pbmc.rds")
+```
+
+```{r}
+#find markers of clusters
+pbmc.markers <- FindAllMarkers(object = pbmc,
+                               only.pos = TRUE,
+                               min.pct = 0.25, #number of cells this has to be detectable in
+                               thresh.use = 0.25) #log2 fold change
+
+pbmc.markers %>%
+  group_by(cluster) %>%
+  top_n(2, avg_diff)
+```
+

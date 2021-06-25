@@ -1,0 +1,63 @@
+---
+title: "class3"
+author: "alexandria hughes"
+date: "December 4, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+
+
+```
+
+
+
+```{r}
+library(tidyverse)
+library(eda)
+
+#devtools::install_github("rnabioco/eda")
+```
+
+```{r}
+missing %>% filter(is.na(name))
+missing %>% na.omit()
+sum(missing$value1)
+sum(missing$value1, na.rm=TRUE)
+```
+```{r}
+missing %>% filter(is.na(value1) | is.na(value2)) %>% summarize(n=n())
+```
+```{r}
+missing %>% filter(!is.na(id))
+```
+```{r}
+missing %>% group_by(group) %>% summarize(mean(value1, na.rm=TRUE), mean(value2, na.rm=TRUE))
+```
+```{r}
+missing %>% group_by(group) %>% summarize_at(.vars=vars(starts_with('value')), .funs=mean, na.rm=TRUE))
+```
+```{r}
+head(brauer_gene_exp)
+```
+
+```{r}
+brauer_gene_exp %>% arrange(expression) 
+```
+```{r}
+brauer_gene_exp %>% sample_n(5)
+#set.seed(some number) gives you reproducible random set every time
+brauer_gene_exp %>% sample_frac(0.01)
+#sample_frac gives you a random fraction. Homework tonight take 1, 10, 50 percent and calc stats *USE THIS
+```
+```{r}
+brauer_gene_exp %>% select(systematic_name)
+```
+
+```{r}
+yeast_prot_prop 
+#note systematic name matches values in ORF in this table. Want to join them together. Tell join function to join these
+left_join(brauer_gene_exp, yeast_prot_prop, by=c('systematic_name' = 'ORF'))
+```
+

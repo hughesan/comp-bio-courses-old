@@ -1,0 +1,73 @@
+---
+title: "class 1 homework"
+author: "alexandria hughes"
+date: "November 30, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(eda)
+
+```
+#Part 1
+```{r question1}
+#head(mtcars)
+named <- mtcars %>% mutate(name=rownames((.))) %>% select(name, everything())%>%as.tibble()
+head(named)
+
+
+tidy_named <- named %>% gather(key, value, -name)
+tidy_named
+```
+
+#Part 2
+
+```{r question2}
+tidy_named %>% 
+  group_by(key) %>%
+  summarize(key_mean = mean(value), key_var=var(value)) %>%
+  arrange(desc(key_mean))
+
+tidy_named %>%
+  select(-name) %>%
+  group_by(key) %>%
+  summarize_each(funs(mean, var))
+```
+
+#Part 3: Use the original data set to plot -- tidied data is less efficient to use with ggplot. 
+
+```{r question3}
+ggplot(mtcars, aes(x=factor(cyl), y=mpg))+
+  geom_point()
+
+```
+
+#Part 4
+
+```{r question4}
+qpcr_data_tidy <- qpcr_data %>% gather(col, value, -row)
+qpcr_names_tidy <- qpcr_names %>% gather(col, value, -row) %>% separate(value, into=c('cell', 'time', 'gene', 'rt', 'rep'), sep='_')
+
+
+qpcr_tidy <- left_join(qpcr_names_tidy, qpcr_data_tidy) %>% filter(rt =='+')
+qpcr_tidy
+
+ggplot(qpcr_tidy, aes(value, time))+
+  geom_point()+
+  facet_grid(cell ~ gene)
+
+```
+
+
+
+
+
+
+
+
+

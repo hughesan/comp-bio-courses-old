@@ -1,0 +1,96 @@
+---
+title: "Exercises 2"
+author: "Alexandria Hughes"
+date: "12/3/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r}
+library(tidyverse)
+library(eda)
+```
+
+# Overview
+
+Here is a [link](https://raw.githubusercontent.com/rnabioco/eda/master/vignettes/exercises-2.Rmd) to the text of these exercises.
+
+# Question 1
+
+Calculate the mean and variance of the `Ozone`, `Solar.R`, `Wind`, and `Temp` variables for each month in the `airquality` dataset, ignoring `NA` values. Use `summarize()` first, then use `summarize_at()`. Note that arguments to summary functions can be passed as dots to `summarize_at()`.
+
+## Strategy
+
+```{r q1}
+str(airquality)
+
+#Use summarize to calculate mean and variance for each variable and ignore NA values by setting na.rm=TRUE
+airquality %>% group_by(Month) %>% summarize(mean(Ozone, na.rm=TRUE), mean(Solar.R, na.rm=TRUE), mean(Wind, na.rm=TRUE), mean(Temp, na.rm=TRUE), var(Ozone, na.rm=TRUE), var(Solar.R, na.rm=TRUE), var(Wind, na.rm=TRUE), var(Temp, na.rm=TRUE))
+
+#Now try to get the same values by using summarize_at
+airquality %>% group_by(Month) %>% summarize_at(c("Ozone", "Solar.R", "Wind", "Temp"), c("mean", "var"), na.rm=TRUE)
+```
+
+## Interpretation
+
+Summarize_at is more convenient to use than summarize when several columns are being summarized on multiple measures.
+
+
+# Question 2
+
+Calculate mean expression values for each `nutrient` of `brauer_gene_exp`. Calculate the values by sampling 1%, 10% and 50% of the rows. How do your numbers change at each threshold?
+
+## Strategy
+
+```{r q2}
+brauer_1percent <- brauer_gene_exp %>% group_by(nutrient) %>% sample_frac(0.01) %>%summarize(mean(expression, na.rm=TRUE))
+brauer_1percent
+#Sample_frac cares about whether the data is grouped, will sample within each group if after group_by
+
+brauer_10percent <- brauer_gene_exp %>% group_by(nutrient) %>% sample_frac(0.10) %>% summarize(mean(expression, na.rm=TRUE))
+brauer_50percent <- brauer_gene_exp %>% group_by(nutrient) %>% sample_frac(0.50) %>% summarize(mean(expression, na.rm=TRUE))
+brauer_10percent
+brauer_50percent
+
+brauer_30percent <- brauer_gene_exp %>% group_by(nutrient) %>% sample_frac(0.30) %>% summarize(mean(expression, na.rm=TRUE))
+brauer_30percent
+
+brauer_40percent <- brauer_gene_exp %>% group_by(nutrient) %>% sample_frac(0.40) %>% summarize(mean(expression, na.rm=TRUE))
+brauer_40percent
+
+brauer_90percent <- brauer_gene_exp %>% group_by(nutrient) %>% sample_frac(0.90) %>% summarize(mean(expression, na.rm=TRUE))
+brauer_90percent
+
+brauer_100percent <- brauer_gene_exp %>% group_by(nutrient) %>% summarize(mean(expression, na.rm=TRUE))
+brauer_100percent
+
+```
+
+## Interpretation
+
+I played with several additional thresholds because I thought this was a neat illustration of the error incurred by sampling anything less than the whole population (which, yes, usually impossible). The 50% sample better approximates the mean than the 1% and 10% samples *most* of the time, but I refreshed enough to see some examples where the 10% value did a better job. In general, it seems that the bigger the fraction, the better approximation -- but the values seem to home in on the range of the true mean after about 30%.  
+
+
+# Question 3 
+
+Join the `brauer_gene_exp` and `yeast_prot_prop` tables and calculate the mean codon adaptation index (`CAI` in `yeast_prot_prop`) for each molecular funtion (`MF` in `brauer_gene_exp`). Sort the results from largest to smallest mean CAI.
+
+## Strategy
+
+```{r q3}
+#Join the tables on the common column (has different names in each table, sys_name and ORF)
+joined_brauer_yeast <- left_join(brauer_gene_exp, yeast_prot_prop, by=c('systematic_name' = 'ORF')) 
+
+#Use joined table, group by molecular function, and calculate mean CAI. Sort by descending CAI_mean afterwards:
+joined_brauer_yeast_summ <- joined_brauer_yeast %>% group_by(MF) %>% summarize(CAI_mean = mean(CAI)) %>% arrange(desc(CAI_mean)) 
+joined_brauer_yeast_summ
+
+```
+
+## Interpretation
+
+The CAI of glycolysis and metabolically-important enzymes is high, indicating that yeast efficiently translate these proteins. 

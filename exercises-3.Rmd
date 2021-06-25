@@ -1,0 +1,135 @@
+---
+title: "Exercises 3"
+author: "alexandria hughes"
+date: "12/7/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidyverse)
+library(eda)
+```
+
+# Overview
+
+Here is a [link](https://raw.githubusercontent.com/rnabioco/eda/master/vignettes/exercises-3.Rmd) to the text of these exercises.
+
+# Question 1
+
+The Encode project has performed `eCLIP` experiments to map RNA binding protein  (RBP) binding sites for > 100 RBPs. Go to the [Encode website](https://www.encodeproject.org/matrix/?type=Experiment), search for `eCLIP` experiments, select an RBP eClip experiment, and load a `BED` file (**bed narrowPeak** file format) with the binding sites into R using just the url. 
+
+Use the [`read_narrowPeak()`](https://rnabioco.github.io/valr/reference/read_bed.html) function from `valr` to read in your bed file using just the URL. Do not download the file locally.
+
+Also, make sure that the file was generated using the `hg19` genome build, and that you do **not** select the `eCLIP mock input` samples, which are negative controls. Display the bed tibble that you pulled from the Encode database and give a one to two sentence summary about the known functions of the RBP. 
+
+Here's an example. An eClip experiment for `PTPB1` was performed ([info here](https://www.encodeproject.org/experiments/ENCSR384KAN/). I selected `hg19` and in the `file details` menu and selected a bed narrowPeak file [here](https://www.encodeproject.org/files/ENCFF471GJE/). I copied the URL by right-clicking on `Download ENCFF471GJ` and selecting copy link address.  Note that the extension of the file in the URL that you use should be `.bed.gz`, do not use `bigBed`, `fastq`, `bam`, or `bigWig` files. 
+
+```{r q1_example}
+library(valr)
+url <- "https://www.encodeproject.org/files/ENCFF471GJE/@@download/ENCFF471GJE.bed.gz"
+
+read_narrowpeak(url)
+```
+
+## Strategy
+
+```{r q1}
+#FMR1 replicate 1, 3rd entry on https://www.encodeproject.org/experiments/ENCSR331VNX/
+
+library(valr)
+url<- "https://www.encodeproject.org/files/ENCFF965SEZ/@@download/ENCFF965SEZ.bed.gz"
+
+fmr1_peaks <- read_narrowpeak(url)
+fmr1_peaks
+
+```
+
+## Interpretation
+
+Fmr1 encodes fragile X mental retardation protein (FMRP), a major RBP that acts at synapses to bidirectionally modify synaptic strength by translational repression of some synaptic proteins but also promoting the transport and stability of specific mRNAs within dendrites. Trinucleotide repeat expansion within Fmr1 causes fragile X syndrome (the name comes from fmr1's location on the X chromosome), a form of intellectual disability.   
+
+# Question 2
+
+Use `bed_intersect()` and some dplyr functions to determine how many `eCLIP` peaks are found in genes and how many are intergenic. (see the documentation on the `invert` argument for `bed_intersect()`). Use the `hg19_genes.bed.gz` bed file as your gene bed file (location shown below). Explain in the interpretation whether or not the RBP primarily binds to known (geneic) or unannotated (intergeneic) regions. 
+
+## Strategy
+
+```{r q2}
+genes <- system.file("extdata", "hg19_genes.bed.gz", package = "eda")
+gene_regions <- read_bed(genes, n_fields = 6)
+gene_regions
+
+#intersect gene regions with fmr1 peaks
+gene_intersect_fmr1 <- bed_intersect(fmr1_peaks, gene_regions)
+gene_intersect_fmr1
+
+geneic_region_count <- gene_intersect_fmr1 %>% 
+  group_by(chrom, start.x, strand.x, end.x) %>% 
+  summarize(n=n()) %>% 
+  nrow()
+geneic_region_count
+ 
+intergeneic_region_count <- bed_intersect(fmr1_peaks, gene_regions, invert=TRUE) %>% 
+  nrow()
+intergeneic_region_count
+
+(intergeneic_region_count/(geneic_region_count + intergeneic_region_count)) *100
+
+```
+
+## Interpretation
+
+Fmr1 primarily binds to geneic regions. Less than 1.5% of the detected bound regions are intergeneic.
+
+# Question 3 
+
+Determine which gene has the largest number of binding sites for your `RBP`. 
+
+## Strategy
+
+```{r q3}
+#Use bed_intersected list of genes as input, group by the column of gene names (name.y), summarize to count the number of binding sites per gene, and arrange in descending order so the gene with the largest number of binding sites is listed first
+fmr1_top_genes <- gene_intersect_fmr1 %>% 
+  group_by(name.y) %>% 
+  summarize(n=n()) %>% 
+  arrange(desc(n))
+fmr1_top_genes
+
+```
+
+## Interpretation
+
+RTN4 has the most binding sites for fmr1. RTN4 encodes Nogo, a protein expressed by neurons that inhibits axon sprouting during synapse formation. Because fmr1 is known for multiple roles at the synapse, this makes at least some sense (even without knowing what, specifically, fmr1 is doing to rtn4).   
+
+# Question 4
+
+Use another function from `valr` (overview and documentation [here](https://rnabioco.github.io/valr/articles/valr.html) to study a relationship between your eClip binding sites and genes in the `gene` bed file. Explain your question and answer. Some `valr` functions require a `genome` file, which indicates the lengths of the chromosomes.You can access this file as shown below.
+
+```{r, eval = F}
+genome_file <- system.file("extdata", "hg19_genome.txt.gz", package = "eda")
+genome <- read_genome(genome_file)
+
+genome
+```
+
+## Strategy
+
+```{r q4}
+
+fmr1_peaks_merged_peak_lengths <- bed_merge(fmr1_peaks, max_dist = 100) %>% #By merging binding sites <100 bp away from each other, I eliminate eClip artifacts (incomplete or mismatch binding at a binding site)
+  mutate(end-start) %>% #add a column to look at binding site (peak) length
+  group_by(chrom) %>% 
+  summarize(mean_peak = mean(`end - start`)) %>% #Calc mean peak length per chromosome
+  arrange(mean_peak) #Arrange mean length in ascending (default) order
+fmr1_peaks_merged_peak_lengths
+
+
+```
+
+## Interpretation
+
+The question I wanted to (naively) ask is whether different chromosomes, especially the sex chromosomes, would exhibit a difference in peak size, since Fmr1 is on the X chromosome. To address this, I first used the bed_merge function in valr to combine peaks that are close to each other to eliminate experimental artifacts. Then, I created a column with peak size by subtracting the end position from the start (+ strand). I grouped by chromosome and then found the mean peak length per chromosome and arranged by peak size. The Y chromosome has shorter mean peak length than all other chromosomes, by a lot (26.0 vs ~45-50 bp for the others). The significance of this is somewhat unclear but interesting, since fmr1 is encoded by the X chromosome and thus affects mainly XY males, but if it also binds the Y chromosome more easily (?) (shorter binding site) this may also contribute to disease.     

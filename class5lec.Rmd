@@ -1,0 +1,148 @@
+---
+title: "class5lec"
+author: "alexandria hughes"
+date: "December 11, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(valr)
+library(tidyverse)
+library(eda)
+update_eda()
+```
+
+```{r}
+genome_file <- system.file("extdata", "hg19_genome.txt.gz", package = "eda")
+genome <- read_genome(genome_file)
+
+
+bed <- read_bed("https://de.cyverse.org/anon-files/iplant/home/kriemo/data/class/polra2_hela_1e6.bg.gz",
+                n_fields = 4)
+bg <- select(bed, everything(), value = name)
+bg <- mutate(bg, 
+              value = as.numeric(value))
+```
+
+
+```{r}
+genome_file <- system.file("extdata", "hg19_genome.txt.gz", package = "eda")
+genome <- read_genome(genome_file)
+```
+
+```{r}
+genes <- system.file("extdata", "hg19_genes.bed.gz", package = "eda")
+genes_bed <- read_bed(genes, n_fields = 6)
+```
+
+bed_random(genome, length=100, n=100, seed=42)
+
+bed_shuffle(genes_bed, genome)
+
+Exercises
+Generate 100,000 random intervals of 100 bp each. Set the random number generator seed to 42 Use the genome R object above. Which chromosome has the most intervals?
+
+```{r}
+random_ivls <- bed_random(genome, length=100, n=100000, seed=42) %>% count(chrom, sort=T)
+#group_by(chrom) %>% summarize(n=n()) %>% arrange(desc(n))
+#chr1 has the most
+```
+
+
+Assign the random intervals produced in question 1 to a new object called random_ivls. Shuffle these intervals using bed_shuffle(), and supply a seed set to 42. How many intervals are now on chr1? Shuffle the random intervals (random_ivls) again, but set the within argument to TRUE. What effect does this have on the number of intervals per chromosome?
+
+```{r}
+bed_shuffle(random_ivls, genome)
+```
+
+
+Use bed_shuffle() to generate a set of shuffled intervals for the RNA-PolII ChIP-Seq bedgraphs. Again set the seed argument to 42. Assign the output to an object named shuffled_coverage. Calculate the total number of basepairs covered in the shuffled and the original bed tibbles.
+
+bind_rows() is dplyr function
+
+```{r}
+tibble_1 <- data_frame(id = seq(1, 100), #seq makes numbers from 1 to 100
+  measurement_1 = rnorm(100)) #100 random numbers from a normal dist
+tibble_1
+```
+
+```{r}
+tibble_2 <- data_frame(id = seq(1, 100),
+  measurement_1 = rnorm(100))
+tibble_2
+```
+
+```{r}
+bind_rows(tibble_1, tibble_2)
+```
+```{r}
+#want to tell where each came from? use id argument
+bind_rows(tibble_1, tibble_2, .id = "tibble_id")
+```
+
+```{r}
+genes_file <- system.file("extdata", "hg19_genes.bed.gz", package = "eda")
+genes <- read_bed(genes_file, n_fields = 6)
+
+genome_file <- system.file("extdata", "hg19_genome.txt.gz", package = "eda")
+genome <- read_genome(genome_file)
+
+bed <- read_bed("https://de.cyverse.org/anon-files/iplant/home/kriemo/data/class/polra2_hela_1e6.bg.gz",
+                n_fields = 4)
+bg <- select(bed, everything(), value = name)
+bg <- mutate(bg, 
+              value = as.numeric(value))
+```
+
+```{r}
+#get tss
+genes %>% filter(strand == "+") %>% mutate(end = start+1)
+```
+
+```{r}
+rnapolII <- genes %>% filter(strand == "+") %>% mutate(end = start+1) %>% bed_slop(genome, both = 1000) %>%bed_makewindows(genome, win_size=10) %>%
+#win_id 1-201 for each gene, starts over each gene
+#this is the set of intervals we want to compute coverage over using bed_map
+bed_map(., bg, coverage_mean = mean(value)) %>%
+#NA means no coverage there
+group_by(.win_id) %>% summarize(mean(coverage_mean, na.rm=TRUE))
+
+
+```
+
+```{r}
+tss_windows <- genes %>% 
+  filter(strand == "+") %>% 
+  mutate(end = start + 1) %>% 
+  bed_slop(genome, both = 1000) %>% 
+  bed_makewindows(genome, win_size = 10)
+```
+
+```{r}
+rnapolII <- bed_map(tss_windows, 
+          bg,
+          total_reads = sum(value)) %>% 
+  group_by(.win_id) %>%
+  summarize(total_coverage = mean(total_reads, na.rm = TRUE))
+```
+
+```{r}
+shuffled_coverage <- bed_shuffle(bg, genome, seed = 42)
+
+shuffled <- bed_map(tss_windows, 
+          shuffled_coverage,
+          total_reads = sum(value)) %>% 
+  group_by(.win_id) %>%
+  summarize(total_coverage = mean(total_reads, na.rm = TRUE))
+```
+
+```{r}
+res <- bind_rows(rnapolII,
+          shuffled,
+          .id = "expt") 
+ggplot(res, aes(x=.win_id, y=total_coverage))+
+  geom_point(aes(color=expt))
